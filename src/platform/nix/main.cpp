@@ -8,8 +8,9 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <pthread.h>
-#include <pulse/pulseaudio.h>
-#include <pulse/simple.h>
+//#include <pulse/pulseaudio.h>
+//#include <pulse/simple.h>
+#include <alsa/asoundlib.h>
 
 #include "game.h"
 
@@ -27,48 +28,57 @@ int osGetTime() {
 // sound
 #define SND_FRAME_SIZE  4
 #define SND_DATA_SIZE   (1024 * SND_FRAME_SIZE)
+#define PCM_DEVICE "default"
 
-pa_simple *sndOut;
+snd_pcm_t *alsaSndOut;
+snd_pcm_hw_params_t *alsaSndParms;
 pthread_t sndThread;
+
+unsigned int pcm;
+unsigned int channels = 2;
+unsigned int rate = 44100;
 
 Sound::Frame *sndData;
 
 void* sndFill(void *arg) {
-    while (1) {
-        Sound::fill(sndData, SND_DATA_SIZE / SND_FRAME_SIZE);
-        pa_simple_write(sndOut, sndData, SND_DATA_SIZE, NULL);
-    }
-    return NULL;
+  while (1) {
+    Sound::fill(sndData, SND_DATA_SIZE / SND_FRAME_SIZE);
+    snd_pcm_writei(alsaSndOut, sndData, 1024);
+  }
+  return NULL;
 }
 
 void sndInit() {
-    static const pa_sample_spec spec = {
-        .format   = PA_SAMPLE_S16LE,
-        .rate     = 44100,
-        .channels = 2
-    };
+  if (pcm = snd_pcm_open(&alsaSndOut, PCM_DEVICE, SND_PCM_STREAM_PLAYBACK, 0) < 0)
+    exit(1);
 
-    static const pa_buffer_attr attr = {
-        .maxlength  = SND_DATA_SIZE * 4,
-        .tlength    = 0xFFFFFFFF,
-        .prebuf     = 0xFFFFFFFF,
-        .minreq     = SND_DATA_SIZE,
-        .fragsize   = 0xFFFFFFFF,
-    };
+  snd_pcm_hw_params_alloca(&alsaSndParms);
 
-    int error;
-    if (!(sndOut = pa_simple_new(NULL, WND_TITLE, PA_STREAM_PLAYBACK, NULL, "game", &spec, NULL, &attr, &error))) {
-        LOG("pa_simple_new() failed: %s\n", pa_strerror(error));
-        sndData = NULL;
-        return;
-    }
+  snd_pcm_hw_params_any(alsaSndOut, alsaSndParms);
 
-    sndData = new Sound::Frame[SND_DATA_SIZE / SND_FRAME_SIZE];
-    pthread_create(&sndThread, NULL, sndFill, NULL);
+  // Set alsa sound device parms
+
+  if (pcm = snd_pcm_hw_params_set_access(alsaSndOut, alsaSndParms, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
+    printf("error at snd_pcm_hw_params_set_access()\n");
+
+  if (pcm = snd_pcm_hw_params_set_format(alsaSndOut, alsaSndParms, SND_PCM_FORMAT_S16_LE) < 0)
+    printf("error at snd_pcm_hw_params_set_format()\n");
+
+  if (pcm = snd_pcm_hw_params_set_channels(alsaSndOut, alsaSndParms, channels) < 0)
+    printf("error at snd_pcm_hw_params_set_channels()\n");
+
+  if (pcm = snd_pcm_hw_params_set_rate_near(alsaSndOut, alsaSndParms, &rate, 0) < 0)
+    printf("error at snd_pcm_hw_params_set_rate_near()\n");
+
+  if (pcm = snd_pcm_hw_params(alsaSndOut, alsaSndParms) < 0)
+    printf("error at snd_pcm_hw_params()\n");
+
+  sndData = new Sound::Frame[SND_DATA_SIZE / SND_FRAME_SIZE];
+  pthread_create(&sndThread, NULL, sndFill, NULL);
 }
 
 void sndFree() {
-    if (sndOut) {
+    if (alsaSndOut) {
         pthread_cancel(sndThread);
     //    pa_simple_flush(sndOut, NULL);
     //    pa_simple_free(sndOut);
