@@ -1,3 +1,7 @@
+# ALSA
+
+If you're using ALSA instead of PulseAudio, this build is for you!
+
 # OpenLara
 Classic Tomb Raider open-source engine
 
