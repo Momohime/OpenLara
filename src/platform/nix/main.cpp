@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <pthread.h>
-//#include <pulse/pulseaudio.h>
-//#include <pulse/simple.h>
 #include <alsa/asoundlib.h>
 
 #include "game.h"
